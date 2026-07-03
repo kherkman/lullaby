@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yön Sävelet - Soittorasia</title>
+    <title>Soittorasia</title>
     <style>
         /* Perusasettelut ja taustagradientti */
         body, html {
@@ -266,8 +266,7 @@
             const time = audioCtx.currentTime;
             const tempoModulation = Math.sin(time * 0.04) * 6; 
             const currentTempo = baseTempo + tempoModulation;
-            const duration = 60 / currentTempo / 2; 
-            return Math.max(0.1, duration); // Turvaraja ikuisen silmukan estämiseksi
+            return 60 / currentTempo / 2; 
         }
 
         const scale = [60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81, 83, 84];
@@ -284,12 +283,14 @@
         let motifPlayCount = 0; 
 
         // Melodiastrategiat
-        let currentMelodyStrategy = 'default'; // 'default', 'questionAnswer' (A), 'climax' (B), 'breathing' (C)
+        let currentMelodyStrategy = 'default'; // 'default', 'questionAnswer' (A), 'climax' (B), 'breathing' (C), 'randomTuutu'
         let dynamicsEnabled = false;           // Dynaaminen voimakkuus (D)
         let earlyResolutionActive = false;     // 80 % todennäköisyys aikaiselle purulle tahdeissa 4 ja 8
-        let currentResolutionPattern = 0;      // Kierroittain vaihtuva melodinen purkukuvio (0-4)
-        let omitResolutionNoteActive = false;  // 50 % todennäköisyys jättää yksi sävel soittamatta [1]
-        let omitResolutionNoteIndex = 1;       // Nuottiportaan indeksi, joka jätetään väliin (1 tai 2) [1]
+        let currentResolutionPattern = 0;      // Kierroittain vaihtuva melodinen purkukuvio (0-9)
+        let currentResolutionRhythm = 0;       // Kierroittain vaihtuva rytminen purkukaava (0-2)
+        let currentResolutionLength = 4;       // Kierroittain vaihtuva purkukuvion pituus (2-5)
+        let omitResolutionNoteActive = false;  // 50 % todennäköisyys jättää yksi sävel soittamatta
+        let omitResolutionNoteIndex = 1;       // Nuottiportaan indeksi, joka jätetään väliin (1 tai 2)
 
         // Nuottiseuranta ja hienosäätö
         let lastMelodyMidi = null;
@@ -304,13 +305,13 @@
         let highestNotesCurrentLoop = [null, null, null, null, null, null, null, null];
         let highestNotesSaved = [72, 76, 79, 72, 72, 76, 79, 72]; 
 
-        // Generoidaan kokonaan uusi melodinen ja rytminen teema
+        // Generoidaan kokonaan uusi melodinen ja rytminen teema (Laajennettu 16 musikaaliseen rytmimalliin!)
         function generateNewMotif() {
             const lengths = [4, 6, 8]; 
             const len = lengths[Math.floor(Math.random() * lengths.length)];
             const notes = [];
             
-            // Määritellään 8 erilaista melodista rytmimallivaihtoehtoa
+            // Määritellään 16 erilaista, erittäin monipuolista melodista rytmimallivaihtoehtoa
             const rhythmPresets = [
                 // 1. Keinuva unelma (Siciliano-keinuntainen rullaavuus)
                 [1, 0, 1, 1, 0, 1, 1, 0],
@@ -327,7 +328,23 @@
                 // 7. Kepeä unikuva (Takapotkuja painottava synkooppi)
                 [0, 1, 1, 0, 0, 1, 1, 0],
                 // 8. Unen poimu (Painotus tahdin loppua kohden, sitten rauhoittuminen)
-                [1, 0, 1, 0, 1, 1, 0, 0]
+                [1, 0, 1, 0, 1, 1, 0, 0],
+                // 9. Uneksijan herätys (Nopeampi alkurytmi, joka vaimenee)
+                [1, 1, 1, 0, 1, 0, 0, 0],
+                // 10. Lempeä tuuli (Pitkiä välejä ja harvoja kaksoiskilahduksia)
+                [1, 0, 0, 1, 0, 0, 0, 1],
+                // 11. Haltijan askeleet (Asymmetrinen, mielenkiintoinen synkooppi)
+                [0, 1, 0, 1, 1, 0, 1, 0],
+                // 12. Satutarinan kuiskaus (Kauniisti rullaavat triplatyt)
+                [1, 0, 1, 0, 1, 1, 1, 0],
+                // 13. Pilven reunalla (Kevyt leijuva rytmi takapotkulla)
+                [0, 0, 1, 1, 0, 0, 1, 1],
+                // 14. Helisevä sadepisara (Tasainen kolmijakoinen liike)
+                [1, 1, 0, 1, 1, 0, 1, 0],
+                // 15. Kehtolaulun syke (Sydämenlyöntipari)
+                [1, 1, 0, 0, 0, 0, 1, 1],
+                // 16. Rauhoittuva virta (Alussa tiheämpi, lopussa täysin tyhjä)
+                [1, 0, 1, 0, 1, 0, 0, 0]
             ];
 
             // Valitaan joko musikaalinen esiasetus (85 % todennäköisyys) tai satunnainen kuvio
@@ -379,6 +396,7 @@
         // Master-äänenkäsittelylaitteet
         let delayNode = null;
         let delayFeedback = null;
+        let delayFeedbackFilter = null; // Globaali suodatin kaikujen vaimentamiseen
         let masterLPF = null;
         let masterHPF = null;
         let masterLimiter = null;
@@ -417,6 +435,7 @@
             masterLimiter.connect(audioCtx.destination);
         }
 
+        // Äänimoottori palautettu täsmälleen tuutu3.html malliseksi [1]
         function playMusicBoxNode(midiNote, time, duration, volume = 0.08) {
             if (!audioCtx) return;
             const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
@@ -434,12 +453,13 @@
 
             osc1.frequency.value = freq;
             osc2.frequency.value = freq;
-            osc3.frequency.value = freq * 4; 
+            osc3.frequency.value = freq * 4; // Kaksi oktaavia korkeampi [1]
 
             const g1 = audioCtx.createGain();
             const g2 = audioCtx.createGain();
             const g3 = audioCtx.createGain();
 
+            // Voimakkuussuhteet palautettu täsmälleen tuutu3.html versioksi [1]
             g1.gain.value = 0.6;
             g2.gain.value = 0.3;
             g3.gain.value = 0.18; 
@@ -465,7 +485,7 @@
 
             voiceGain.gain.setValueAtTime(0, time);
             voiceGain.gain.linearRampToValueAtTime(volume, time + 0.005);
-            voiceGain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+            voiceGain.gain.exponentialRampToValueAtTime(0.0001, time + duration); // Alkuperäinen käyrä [1]
 
             osc1.start(time);
             osc2.start(time);
@@ -511,26 +531,73 @@
             return note;
         }
 
+        // Apufunktio: Laskee dynaamisesti ja joustavasti askeleiden sijoittelun eri pituisille purkumalleille
+        function getResolutionSteps(length, rhythmType, isEarly) {
+            if (isEarly) {
+                if (length === 5) {
+                    const presets = [[0, 1, 2, 3, 4], [0, 1, 2, 4, 5], [0, 2, 3, 4, 5]];
+                    return presets[rhythmType % presets.length];
+                }
+                if (length === 4) {
+                    const presets = [[0, 1, 2, 3], [0, 1, 3, 4], [0, 2, 3, 4]];
+                    return presets[rhythmType % presets.length];
+                }
+                if (length === 3) {
+                    const presets = [[0, 1, 2], [0, 2, 3], [0, 1, 3]];
+                    return presets[rhythmType % presets.length];
+                }
+                if (length === 2) {
+                    const presets = [[0, 1], [0, 2], [0, 3]];
+                    return presets[rhythmType % presets.length];
+                }
+            } else {
+                if (length === 5) {
+                    const presets = [[0, 1, 3, 5, 7], [0, 2, 4, 5, 7], [0, 1, 2, 4, 6]];
+                    return presets[rhythmType % presets.length];
+                }
+                if (length === 4) {
+                    const presets = [[0, 2, 4, 6], [0, 1, 3, 5], [0, 2, 3, 5]];
+                    return presets[rhythmType % presets.length];
+                }
+                if (length === 3) {
+                    const presets = [[0, 2, 5], [0, 3, 6], [0, 2, 4]];
+                    return presets[rhythmType % presets.length];
+                }
+                if (length === 2) {
+                    const presets = [[0, 4], [0, 6], [0, 3]];
+                    return presets[rhythmType % presets.length];
+                }
+            }
+            return [0, 1, 2, 3];
+        }
+
         function scheduleNote(step, time) {
             const bar = Math.floor(step / 8) % 8;
             const stepInBar = step % 8;
             const motifStep = step % motif.length;
 
             if (step === 0) {
-                currentProgression = generateProgression();
-                currentStyle = Math.floor(Math.random() * 8); 
+                motifPlayCount++;
                 
-                // Arvotaan strategiat kullekin 64 askeleen kierrolle
+                // Arvotaan uusi melodiastrategia: 50 % todennäköisyydellä tuutu3.html kaltainen satunnaisversio [2]
                 const strategyRoll = Math.random();
-                if (strategyRoll < 0.30) {
-                    currentMelodyStrategy = 'default';
-                } else if (strategyRoll < 0.55) {
-                    currentMelodyStrategy = 'questionAnswer'; // Optio A
-                } else if (strategyRoll < 0.80) {
-                    currentMelodyStrategy = 'climax';         // Optio B
+                if (strategyRoll < 0.50) {
+                    currentMelodyStrategy = 'randomTuutu'; // Optio: Satunnaisversio [2]
                 } else {
-                    currentMelodyStrategy = 'breathing';       // Optio C
+                    // Loput 50 % jaetaan muiden strukturoitujen mallien kesken [2]
+                    const subRoll = Math.random();
+                    if (subRoll < 0.30) {
+                        currentMelodyStrategy = 'default';
+                    } else if (subRoll < 0.55) {
+                        currentMelodyStrategy = 'questionAnswer'; // Optio A
+                    } else if (subRoll < 0.80) {
+                        currentMelodyStrategy = 'climax';         // Optio B
+                    } else {
+                        currentMelodyStrategy = 'breathing';       // Optio C
+                    }
                 }
+
+                currentStyle = Math.floor(Math.random() * 8); 
 
                 // Optio D (Dynaamisuus) on päällä 50 % todennäköisyydellä minkä tahansa muun strategian rinnalla
                 dynamicsEnabled = Math.random() < 0.50;
@@ -538,15 +605,19 @@
                 // 80 % todennäköisyydellä 4. ja 8. tahdilla rytmin loppu jätetään hiljaiseksi ja purku tuodaan alkuun
                 earlyResolutionActive = Math.random() < 0.80;
 
-                // Arvotaan kierroittain vaihtuva hieno resoluutiomalli (0-4)
-                currentResolutionPattern = Math.floor(Math.random() * 5);
+                // Arvotaan kierroittain vaihtuva purkukuvion pituus (2-5 nuottia)
+                currentResolutionLength = [2, 3, 4, 5][Math.floor(Math.random() * 4)];
 
-                // 50 % todennäköisyys jättää toinen tai kolmas sävel soittamatta [1]
-                omitResolutionNoteActive = Math.random() < 0.50;
-                // Arvotaan kumpi askeleista (1 = toinen nuotti, 2 = kolmas nuotti) jätetään hiljaiseksi [1]
-                omitResolutionNoteIndex = Math.random() < 0.50 ? 1 : 2;
+                // Arvotaan kierroittain vaihtuva hieno resoluutiomalli (0-9)
+                currentResolutionPattern = Math.floor(Math.random() * 10);
+                // Arvotaan kierroittain vaihtuva rytminen purkukaava (0-2)
+                currentResolutionRhythm = Math.floor(Math.random() * 3);
 
-                motifPlayCount++;
+                // Arvotaan jätetäänkö jokin nuotti soittamatta (vain pituuksille >= 3)
+                omitResolutionNoteActive = (currentResolutionLength >= 3) && (Math.random() < 0.50);
+                // Valitaan satunnainen välisävel (ei ensimmäistä eikä viimeistä)
+                omitResolutionNoteIndex = Math.floor(Math.random() * (currentResolutionLength - 2)) + 1;
+
                 if (motifPlayCount >= 3) { 
                     if (Math.random() < 0.3) {
                         generateNewMotif();
@@ -569,11 +640,8 @@
                 highestNotesCurrentLoop = [null, null, null, null, null, null, null, null];
             }
 
-            // Varmistetaan varajärjestelmällä, että sointukierto on ladattu kaatumisen estämiseksi
-            if (currentProgression.length === 0) {
-                currentProgression = generateProgression();
-            }
-            const activeChord = currentProgression[bar] || I_C;
+            // Varmistetaan sointukierron indeksien turvallinen käsittely tahdin pituudesta riippumatta
+            const activeChord = currentProgression[bar % currentProgression.length] || I_C;
 
             // Matemaattiset apusävelet bassonsoittoon
             const root = activeChord.bass;
@@ -581,86 +649,108 @@
             const fifth = activeChord.bass + 7;
             const octave = activeChord.bass + 12;
 
-            // 1. BASSOKUVIOT JA RATKAISUT (Tehty huomattavasti monipuolisemmiksi)
-            if (bar === 6) {
-                // Tahti 7: G-dominanttibasso
-                if (stepInBar === 0) playMusicBoxNode(root, time, 2.5, 0.11);
-                if (stepInBar === 4) playMusicBoxNode(fifth, time, 1.8, 0.08);
-            } else if (bar === 7) {
-                // Tahti 8: Syvä C-bassoresoluutio
-                if (stepInBar === 0) playMusicBoxNode(root, time, 3.5, 0.13); 
-                if (stepInBar === 4) playMusicBoxNode(third, time, 2.0, 0.06); 
+            // 1. BASSOKUVIOT JA RATKAISUT
+            if (currentMelodyStrategy === 'randomTuutu') {
+                // Tuutu3.html-tyylinen hyvin yksinkertainen ja rauhallinen säestysrakenne [2]
+                if (stepInBar === 0) {
+                    playMusicBoxNode(activeChord.bass, time, 2.5, 0.10);
+                } else if (stepInBar === 4) {
+                    playMusicBoxNode(activeChord.chordNotes[0], time, 2.0, 0.07);
+                }
+                if (stepInBar === 2 || stepInBar === 6) {
+                    const note = activeChord.chordNotes[Math.floor(Math.random() * 2) + 1];
+                    playMusicBoxNode(note, time, 1.5, 0.05);
+                }
             } else {
-                switch(currentStyle) {
-                    case 0: // Virtaava murtosointu koko äänialalla (root -> 5th -> octave -> upper 3rd)
-                        if (stepInBar === 0) playMusicBoxNode(root, time, 2.5, 0.10);
-                        if (stepInBar === 2) playMusicBoxNode(fifth, time, 2.0, 0.07);
-                        if (stepInBar === 4) playMusicBoxNode(octave, time, 1.8, 0.06);
-                        if (stepInBar === 6) playMusicBoxNode(third + 12, time, 1.5, 0.05);
-                        break;
-                    case 1: // Synkopoitu keinunta kevyellä koristeiskulla
-                        if (stepInBar === 0) playMusicBoxNode(root, time, 2.5, 0.10);
-                        if (stepInBar === 3) playMusicBoxNode(third, time, 1.6, 0.07);
-                        if (stepInBar === 5) playMusicBoxNode(fifth, time, 1.4, 0.06);
-                        if (stepInBar === 7) playMusicBoxNode(octave, time, 1.0, 0.04);
-                        break;
-                    case 2: // Ambient/Pitkät soinnut lisätyllä matalalla sydämenlyönnillä
-                        if (stepInBar === 0) {
-                            playMusicBoxNode(root, time, 3.5, 0.11);
-                            playMusicBoxNode(third, time, 2.8, 0.04);
-                            playMusicBoxNode(fifth, time, 2.8, 0.04);
-                        }
-                        if (stepInBar === 4) {
-                            playMusicBoxNode(root - 12, time, 2.0, 0.05); // Erittäin matala syke tuomaan syvyyttä
-                        }
-                        break;
-                    case 3: // Oktaaviloikka rullaavalla väliäänellä
-                        if (stepInBar === 0) playMusicBoxNode(root, time, 1.8, 0.10);
-                        if (stepInBar === 2) playMusicBoxNode(fifth, time, 1.2, 0.05);
-                        if (stepInBar === 4) playMusicBoxNode(octave, time, 1.5, 0.07);
-                        if (stepInBar === 6) playMusicBoxNode(fifth, time, 1.2, 0.04);
-                        break;
-                    case 4: // Täyteläinen pehmeä valssi sointuhajotuksella
-                        if (stepInBar === 0) playMusicBoxNode(root, time, 2.5, 0.11);
-                        if (stepInBar === 2) { 
-                            playMusicBoxNode(third, time, 1.5, 0.05); 
-                            playMusicBoxNode(fifth, time, 1.5, 0.05); 
-                        }
-                        if (stepInBar === 4) { 
-                            playMusicBoxNode(third, time, 1.5, 0.05); 
-                            playMusicBoxNode(fifth, time, 1.5, 0.05); 
-                            playMusicBoxNode(octave, time, 1.5, 0.04);
-                        }
-                        if (stepInBar === 6) playMusicBoxNode(fifth, time, 1.2, 0.04);
-                        break;
-                    case 5: // Askeltava basso sulavilla siirtosävelillä
-                        if (stepInBar === 0) playMusicBoxNode(root, time, 2.0, 0.10);
-                        if (stepInBar === 2) playMusicBoxNode(third, time, 1.2, 0.06);
-                        if (stepInBar === 4) playMusicBoxNode(fifth, time, 2.0, 0.08);
-                        if (stepInBar === 6) {
-                            const nextBar = (bar + 1) % 8;
-                            const nextChord = currentProgression[nextBar] || I_C;
-                            const passingNote = (nextChord.bass > root) ? root + 2 : root - 2;
-                            playMusicBoxNode(passingNote, time, 1.2, 0.07);
-                        }
-                        break;
-                    case 6: // Keinuva kehto laajennetulla sävelkululla
-                        if (stepInBar === 0) playMusicBoxNode(root, time, 2.2, 0.10);
-                        if (stepInBar === 2) playMusicBoxNode(fifth, time, 1.8, 0.06);
-                        if (stepInBar === 4) playMusicBoxNode(third, time, 1.5, 0.07);
-                        if (stepInBar === 6) playMusicBoxNode(octave, time, 1.2, 0.05);
-                        break;
-                    case 7: // Kipinöivä minimalistinen pulssi rytmisellä kaiulla
-                        if (stepInBar === 0) playMusicBoxNode(root, time, 3.0, 0.10);
-                        if (stepInBar === 3) playMusicBoxNode(fifth, time, 1.5, 0.05);
-                        if (stepInBar === 5) playMusicBoxNode(octave, time, 1.5, 0.04);
-                        break;
+                // Monipuolinen, rullaava ja mekaaninen soittorasiakompitiimi
+                if (bar === 6) {
+                    // Tahti 7: G-dominanttibasso
+                    if (stepInBar === 0) playMusicBoxNode(root, time, 2.5, 0.11);
+                    if (stepInBar === 4) playMusicBoxNode(fifth, time, 1.8, 0.08);
+                } else if (bar === 7) {
+                    // Tahti 8: Syvä C-bassoresoluutio
+                    if (stepInBar === 0) playMusicBoxNode(root, time, 3.5, 0.13); 
+                    if (stepInBar === 4) playMusicBoxNode(third, time, 2.0, 0.06); 
+                } else {
+                    switch(currentStyle) {
+                        case 0: // Jatkuva tasainen kellokoneisto-arpeggio (Vuorotellen kaikilla askeleilla)
+                            if (stepInBar === 0) playMusicBoxNode(root, time, 2.5, 0.08);
+                            if (stepInBar === 2) playMusicBoxNode(fifth, time, 2.0, 0.06);
+                            if (stepInBar === 4) playMusicBoxNode(octave, time, 1.8, 0.05);
+                            if (stepInBar === 6) playMusicBoxNode(third + 12, time, 1.5, 0.05);
+                            if (stepInBar === 1) playMusicBoxNode(fifth, time, 1.5, 0.04);
+                            if (stepInBar === 3) playMusicBoxNode(octave, time, 1.5, 0.04);
+                            if (stepInBar === 5) playMusicBoxNode(third + 12, time, 1.5, 0.04);
+                            if (stepInBar === 7) playMusicBoxNode(fifth, time, 1.5, 0.04);
+                            break;
+                        case 1: // Synkopoitu rullaava ratas
+                            if (stepInBar === 0) playMusicBoxNode(root, time, 2.5, 0.08);
+                            if (stepInBar === 2) playMusicBoxNode(third, time, 1.6, 0.05);
+                            if (stepInBar === 3) playMusicBoxNode(fifth, time, 1.4, 0.05);
+                            if (stepInBar === 5) playMusicBoxNode(octave, time, 1.4, 0.05);
+                            if (stepInBar === 6) playMusicBoxNode(third + 12, time, 1.0, 0.04);
+                            if (stepInBar === 7) playMusicBoxNode(fifth, time, 1.0, 0.04);
+                            break;
+                        case 2: // Keinuva kehtolaulu / Siciliano (6/8-henkinen rullaus)
+                            if (stepInBar === 0) playMusicBoxNode(root, time, 2.5, 0.08);
+                            if (stepInBar === 2) playMusicBoxNode(fifth, time, 1.8, 0.05);
+                            if (stepInBar === 3) playMusicBoxNode(octave, time, 1.5, 0.05);
+                            if (stepInBar === 4) playMusicBoxNode(third + 12, time, 1.8, 0.05);
+                            if (stepInBar === 6) playMusicBoxNode(fifth, time, 1.5, 0.04);
+                            if (stepInBar === 7) playMusicBoxNode(octave, time, 1.5, 0.04);
+                            break;
+                        case 3: // Alberti-tyylinen klassinen soittorasiakuvio
+                            if (stepInBar === 0) playMusicBoxNode(root, time, 2.0, 0.08);
+                            if (stepInBar === 2) playMusicBoxNode(fifth + 12, time, 1.5, 0.05);
+                            if (stepInBar === 4) playMusicBoxNode(third + 12, time, 1.8, 0.05);
+                            if (stepInBar === 6) playMusicBoxNode(fifth + 12, time, 1.5, 0.05);
+                            if (stepInBar === 1) playMusicBoxNode(third, time, 1.5, 0.04);
+                            if (stepInBar === 3) playMusicBoxNode(octave, time, 1.5, 0.04);
+                            if (stepInBar === 5) playMusicBoxNode(third, time, 1.5, 0.04);
+                            if (stepInBar === 7) playMusicBoxNode(octave, time, 1.5, 0.04);
+                            break;
+                        case 4: // Askeleittain nouseva ja laskeva aalto
+                            if (stepInBar === 0) playMusicBoxNode(root, time, 2.5, 0.08);
+                            if (stepInBar === 1) playMusicBoxNode(third, time, 1.5, 0.04);
+                            if (stepInBar === 2) playMusicBoxNode(fifth, time, 1.8, 0.05);
+                            if (stepInBar === 3) playMusicBoxNode(octave, time, 1.5, 0.04);
+                            if (stepInBar === 4) playMusicBoxNode(third + 12, time, 1.8, 0.05);
+                            if (stepInBar === 5) playMusicBoxNode(octave, time, 1.5, 0.04);
+                            if (stepInBar === 6) playMusicBoxNode(fifth, time, 1.8, 0.05);
+                            if (stepInBar === 7) playMusicBoxNode(third, time, 1.5, 0.04);
+                            break;
+                        case 5: // Lohkeileva ja herkkä kello (keveä vuorottelu)
+                            if (stepInBar === 0) playMusicBoxNode(root, time, 2.0, 0.08);
+                            if (stepInBar === 1) playMusicBoxNode(octave, time, 1.2, 0.04);
+                            if (stepInBar === 3) playMusicBoxNode(fifth, time, 1.2, 0.05);
+                            if (stepInBar === 4) playMusicBoxNode(third + 12, time, 1.8, 0.05);
+                            if (stepInBar === 5) playMusicBoxNode(octave, time, 1.2, 0.04);
+                            if (stepInBar === 7) playMusicBoxNode(fifth, time, 1.2, 0.04);
+                            break;
+                        case 6: // Rauhallinen vuorobasso kahdeksasosilta hengitystauolla
+                            if (stepInBar === 0) playMusicBoxNode(root, time, 2.2, 0.08);
+                            if (stepInBar === 1) playMusicBoxNode(fifth, time, 1.4, 0.04);
+                            if (stepInBar === 2) playMusicBoxNode(third, time, 1.6, 0.05);
+                            if (stepInBar === 3) playMusicBoxNode(fifth, time, 1.4, 0.04);
+                            if (stepInBar === 5) playMusicBoxNode(octave, time, 1.6, 0.05);
+                            if (stepInBar === 6) playMusicBoxNode(third + 12, time, 1.4, 0.04);
+                            if (stepInBar === 7) playMusicBoxNode(fifth, time, 1.4, 0.04);
+                            break;
+                        case 7: // Keveästi laukkaava mekaaninen ratas
+                            if (stepInBar === 0) playMusicBoxNode(root, time, 2.5, 0.08);
+                            if (stepInBar === 1) playMusicBoxNode(fifth, time, 1.2, 0.04);
+                            if (stepInBar === 2) playMusicBoxNode(third, time, 1.6, 0.05);
+                            if (stepInBar === 4) playMusicBoxNode(octave, time, 1.8, 0.05);
+                            if (stepInBar === 5) playMusicBoxNode(third + 12, time, 1.2, 0.04);
+                            if (stepInBar === 6) playMusicBoxNode(fifth, time, 1.6, 0.05);
+                            break;
+                    }
                 }
             }
 
-            // 2. POLYMELODIAN TOISTO (Sparkling Poly-Chime) - Vähennetty esiintymistä entisestään (soitetaan vain n. 8 % todennäköisyydellä)
-            if (stepInBar === 5 && Math.random() < 0.08) {
-                const polyMidi = highestNotesSaved[bar];
+            // 2. POLYMELODIAN TOISTO (Sparkling Poly-Chime) - Vähennetty esiintymistä entisestään (soitetaan vain n. 3 % todennäköisyydellä)
+            if (stepInBar === 5 && Math.random() < 0.03) {
+                const polyMidi = highestNotesSaved[bar % highestNotesSaved.length];
                 if (polyMidi) {
                     const celestialNote = polyMidi + 24; 
                     playMusicBoxNode(celestialNote, time + 0.1, 2.5, 0.025); 
@@ -668,52 +758,80 @@
             }
 
             // 3. EDISTYNYT MELODIAGENERAATTORI
-            // Tahti 8 soittaa aina ratkaisevan melodialinjan (päätepiste)
+            // Tuutu3-tyylinen erittäin satunnatut melodiakuviot
+            if (currentMelodyStrategy === 'randomTuutu') {
+                const melodyChances = [0.75, 0.3, 0.6, 0.4, 0.70, 0.3, 0.5, 0.4];
+                
+                if (Math.random() < melodyChances[stepInBar]) {
+                    const steps = [-2, -1, 0, 1, 2];
+                    const move = steps[Math.floor(Math.random() * steps.length)];
+                    melodyIndex = Math.max(3, Math.min(scale.length - 1, melodyIndex + move));
+
+                    let noteToPlay = scale[melodyIndex];
+
+                    if (Math.random() < 0.75) {
+                        const closest = activeChord.chordNotes.reduce((prev, curr) => {
+                            return (Math.abs(curr - noteToPlay) < Math.abs(prev - noteToPlay) ? curr : prev);
+                        });
+                        noteToPlay = closest;
+                    }
+
+                    const octaveShift = (Math.random() < 0.15) ? 12 : 0;
+                    const finalNote = noteToPlay + octaveShift;
+                    const velocity = 0.04 + Math.random() * 0.05;
+
+                    playMusicBoxNode(finalNote, time, 1.6, velocity);
+                }
+                return; // Ohitetaan kaikki strukturoidut sovitussäännöt ja kiinteät purkukadenssit
+            }
+
+            // Tahti 8 soittaa aina ratkaisevan melodialinjan (päätepiste, mukautuen eri pituuksille!)
             if (bar === 7) {
                 let playMelody = false;
                 let noteToPlay = null;
                 let noteDuration = 1.6;
 
-                // 5 erilaista hienoa ja vaihtelevaa resoluutiomallia
+                // 10 erilaista, laajennettua 5-nuottista master-resoluutiokaavaa
                 const resolutionNotesTable = [
-                    [76, 74, 71, 72], // Malli 0: E5 -> D5 -> B4 -> C5 (Klassinen laskeva)
-                    [74, 76, 74, 72], // Malli 1: D5 -> E5 -> D5 -> C5 (Keinuva asteittainen)
-                    [77, 76, 74, 72], // Malli 2: F5 -> E5 -> D5 -> C5 (Plagaalinen tuntu)
-                    [67, 71, 74, 72], // Malli 3: G4 -> B4 -> D5 -> C5 (Nouseva herkkä kaari)
-                    [79, 77, 76, 72]  // Malli 4: G5 -> F5 -> E5 -> C5 (Avara korkea lasku)
+                    [79, 76, 74, 71, 72], // Malli 0: G5 -> E5 -> D5 -> B4 -> C5
+                    [77, 74, 76, 74, 72], // Malli 1: F5 -> D5 -> E5 -> D5 -> C5
+                    [81, 77, 76, 74, 72], // Malli 2: A5 -> F5 -> E5 -> D5 -> C5
+                    [64, 67, 71, 74, 72], // Malli 3: E4 -> G4 -> B4 -> D5 -> C5
+                    [83, 79, 77, 76, 72], // Malli 4: B5 -> G5 -> F5 -> E5 -> C5
+                    [72, 76, 77, 79, 81], // Malli 5: C5 -> E5 -> F5 -> G5 -> A5 (Sekstiratkaisu)
+                    [83, 81, 79, 76, 74], // Malli 6: B5 -> A5 -> G5 -> E5 -> D5 (Ysiputous)
+                    [67, 72, 74, 76, 71], // Malli 7: G4 -> C5 -> D5 -> E5 -> B4 (Maj7-loppu)
+                    [69, 71, 72, 74, 76], // Malli 8: A4 -> B4 -> C5 -> D5 -> E5 (Terssinousu)
+                    [81, 76, 72, 69, 67]  // Malli 9: A5 -> E5 -> C5 -> A4 -> G4 (Laaja kvinttilasku)
                 ];
-                const activeNotes = resolutionNotesTable[currentResolutionPattern % resolutionNotesTable.length];
+                const masterPattern = resolutionNotesTable[currentResolutionPattern % resolutionNotesTable.length];
+                // Slicataan kaava oikeaan pituuteen lopusta käsin, jolloin ratkaisu päätyy aina oikeaan päätössveleensä
+                const activeNotes = masterPattern.slice(5 - currentResolutionLength);
 
                 if (earlyResolutionActive) {
-                    // 80 % todennäköisyydellä: tiivis purku tahdin alkuun (askeleet 0-3) ja loppuosa hiljaa
-                    if (stepInBar >= 0 && stepInBar <= 3) {
-                        // 50 % todennäköisyydellä jätetään toinen (stepInBar === 1) tai kolmas (stepInBar === 2) nuotti soittamatta [1]
-                        if (omitResolutionNoteActive && stepInBar === omitResolutionNoteIndex) {
-                            // Nuotti jätetään soittamatta (hiljaisuus) [1]
+                    // Määritetään vaihtelevat rytmipisteet dynaamisesti
+                    const earlySteps = getResolutionSteps(currentResolutionLength, currentResolutionRhythm, true);
+
+                    const idx = earlySteps.indexOf(stepInBar);
+                    if (idx !== -1) {
+                        // 50 % todennäköisyydellä jätetään toinen (stepInBar === 1) tai kolmas (stepInBar === 2) nuotti soittamatta
+                        if (omitResolutionNoteActive && (idx === omitResolutionNoteIndex)) {
+                            // Nuotti jätetään soittamatta (hiljaisuus)
                         } else {
                             playMelody = true;
-                            noteToPlay = activeNotes[stepInBar];
-                            noteDuration = (stepInBar === 3) ? 4.0 : 1.0;
+                            noteToPlay = activeNotes[idx];
+                            noteDuration = (idx === currentResolutionLength - 1) ? 4.0 : 1.0;
                         }
                     }
                 } else {
-                    // Alkuperäinen levitetty purku
-                    if (stepInBar === 0) {
+                    // Levitetty purku vaihtelevalla rytmillä
+                    const standardSteps = getResolutionSteps(currentResolutionLength, currentResolutionRhythm, false);
+
+                    const idx = standardSteps.indexOf(stepInBar);
+                    if (idx !== -1) {
                         playMelody = true;
-                        noteToPlay = activeNotes[0];
-                        noteDuration = 1.6;
-                    } else if (stepInBar === 2) {
-                        playMelody = true;
-                        noteToPlay = activeNotes[1];
-                        noteDuration = 1.4;
-                    } else if (stepInBar === 4) {
-                        playMelody = true;
-                        noteToPlay = activeNotes[2];
-                        noteDuration = 1.4;
-                    } else if (stepInBar === 6) {
-                        playMelody = true;
-                        noteToPlay = activeNotes[3]; // Purku
-                        noteDuration = 3.5; 
+                        noteToPlay = activeNotes[idx];
+                        noteDuration = (idx === currentResolutionLength - 1) ? 3.5 : 1.4;
                     }
                 }
 
@@ -734,23 +852,25 @@
 
                 // Monipuolistetut ja dynaamiset purkukuvioindeksit soinnun sävelistä resoluutiomallin mukaan
                 const bar3Patterns = [
-                    [1, 2, 1, 0], // Kolmas -> viides -> kolmas -> perussävel
-                    [0, 1, 2, 0], // Perussävel -> kolmas -> viides -> perussävel
-                    [2, 1, 2, 0], // Viides -> kolmas -> viides -> perussävel
-                    [0, 2, 1, 0], // Perussävel -> viides -> kolmas -> perussävel
-                    [3, 2, 1, 0]  // Ylempi oktaavi -> viides -> kolmas -> perussävel
+                    [1, 2, 1, 0, 0], [0, 1, 2, 1, 0], [2, 1, 2, 1, 0], [0, 2, 1, 2, 0], [3, 2, 1, 2, 0],
+                    [1, 0, 2, 1, 0], [2, 0, 1, 2, 0], [0, 3, 2, 1, 0], [1, 3, 1, 2, 0], [3, 1, 2, 1, 0]
                 ];
                 const activePattern = bar3Patterns[currentResolutionPattern % bar3Patterns.length];
+                // Slicataan pituus soveltumaan valittuun nuottimäärään
+                const slicedPattern = activePattern.slice(5 - currentResolutionLength);
 
-                // Soitetaan tiivis purku askeleilla 0-3 ja ratkaistaan se vakaaseen juurisäveleen askeleella 3
-                if (stepInBar >= 0 && stepInBar <= 3) {
-                    // 50 % todennäköisyydellä jätetään toinen (stepInBar === 1) tai kolmas (stepInBar === 2) nuotti soittamatta [1]
-                    if (omitResolutionNoteActive && stepInBar === omitResolutionNoteIndex) {
-                        // Nuotti jätetään soittamatta (hiljaisuus) [1]
+                // Määritetään vaihtelevat rytmipisteet aikaiselle ratkaisulle
+                const earlySteps = getResolutionSteps(currentResolutionLength, currentResolutionRhythm, true);
+
+                const idx = earlySteps.indexOf(stepInBar);
+                if (idx !== -1) {
+                    // 50 % todennäköisyydellä jätetään toinen (stepInBar === 1) tai kolmas (stepInBar === 2) nuotti soittamatta
+                    if (omitResolutionNoteActive && (idx === omitResolutionNoteIndex)) {
+                        // Nuotti jätetään soittamatta (hiljaisuus)
                     } else {
                         playMelody = true;
-                        noteToPlay = activeChord.chordNotes[activePattern[stepInBar]]; // Haetaan monipuolistettu sävel
-                        noteDuration = (stepInBar === 3) ? 3.5 : 1.0;
+                        noteToPlay = activeChord.chordNotes[slicedPattern[idx] % activeChord.chordNotes.length]; // Haetaan monipuolistettu sävel
+                        noteDuration = (idx === currentResolutionLength - 1) ? 3.5 : 1.0;
                     }
                 }
 

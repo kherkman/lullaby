@@ -579,9 +579,9 @@
             if (step === 0) {
                 motifPlayCount++;
                 
-                // Arvotaan uusi melodiastrategia: 50 % todennäköisyydellä tuutu3.html kaltainen satunnaisversio [2]
+                // Arvotaan uusi melodiastrategia: 35 % todennäköisyydellä täysin satunnaisversio [2]
                 const strategyRoll = Math.random();
-                if (strategyRoll < 0.50) {
+                if (strategyRoll < 0.35) {
                     currentMelodyStrategy = 'randomTuutu'; // Optio: Satunnaisversio [2]
                 } else {
                     // Loput 50 % jaetaan muiden strukturoitujen mallien kesken [2]
